@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import ProductPage from './pages/ProductPage';
-import IngresoPage from './pages/IngresoPage';
-import VerificacionPage from './pages/VerificacionPage';
+import ProductPage from './pages/publico/ProductPage';
+import IngresoPage from './pages/operario/IngresoPage';
+import VerificacionPage from './pages/operario/VerificacionPage';
+import EmpaquetadoPage from './pages/operario/EmpaquetadoPage';
+import VerificacionEmpaquePage from './pages/operario/VerificacionEmpaquePage';
 
 function App() {
   return (
@@ -14,6 +16,8 @@ function App() {
             <Route path="/" element={<ProductPage />} />
             <Route path="/ingreso" element={<IngresoPage />} />
             <Route path="/verificacion" element={<VerificacionPage />} />
+            <Route path="/empaquetado" element={<EmpaquetadoPage />} />
+            <Route path="/verificacion-empaque" element={<VerificacionEmpaquePage />} />
           </Routes>
         </main>
       </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import ProductCard from '../components/ProductCard';
+import ProductCard from '../../components/ProductCard';
 
 const PRODUCTOS_MOCK = [
   {
