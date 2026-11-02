@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ProductPage from './pages/ProductPage';
 import IngresoPage from './pages/IngresoPage';
+import VerificacionPage from './pages/VerificacionPage';
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
           <Routes>
             <Route path="/" element={<ProductPage />} />
             <Route path="/ingreso" element={<IngresoPage />} />
+            <Route path="/verificacion" element={<VerificacionPage />} />
           </Routes>
         </main>
       </div>
