@@ -8,7 +8,7 @@ const PRODUCTOS_MOCK = [
     tipoPresentacion: 'Palitos de agua',
     precio: 1.50,
     disponible: true,
-    imagenUrl: 'https://images.unsplash.com/photo-1567206563064-6f60f4078b57?w=500&auto=format&fit=crop&q=60'
+    imagenUrl: 'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?w=500&auto=format&fit=crop&q=60'
   },
   {
     id: 2,
@@ -24,7 +24,7 @@ const PRODUCTOS_MOCK = [
     tipoPresentacion: 'Palitos de agua',
     precio: 1.50,
     disponible: false,
-    imagenUrl: ''
+    imagenUrl: 'https://images.unsplash.com/photo-1534706936160-d5ee67737249?w=500&auto=format&fit=crop&q=60'
   },
   {
     id: 4,
@@ -32,7 +32,7 @@ const PRODUCTOS_MOCK = [
     tipoPresentacion: 'Palitos de crema',
     precio: 2.00,
     disponible: true,
-    imagenUrl: ''
+    imagenUrl: 'https://images.unsplash.com/photo-1570197788417-0e82375c9371?w=500&auto=format&fit=crop&q=60'
   },
   {
     id: 5,
@@ -40,7 +40,7 @@ const PRODUCTOS_MOCK = [
     tipoPresentacion: 'Baldes',
     precio: 15.00,
     disponible: true,
-    imagenUrl: ''
+    imagenUrl: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=500&auto=format&fit=crop&q=60'
   },
   {
     id: 6,
@@ -48,7 +48,7 @@ const PRODUCTOS_MOCK = [
     tipoPresentacion: 'Torta helada',
     precio: 25.00,
     disponible: true,
-    imagenUrl: ''
+    imagenUrl: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=500&auto=format&fit=crop&q=60'
   }
 ];
 
