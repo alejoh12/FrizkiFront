@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 function Navbar() {
+  const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
   const currentPath = location.pathname;
 
@@ -42,6 +44,12 @@ function Navbar() {
     return currentPath === path
       ? "text-pink-600 font-bold border-b-2 border-pink-600 pb-1"
       : "hover:text-pink-600 transition text-gray-600 font-medium pb-1";
+  };
+
+  const getMobileLinkClass = (path) => {
+    return currentPath === path
+      ? "text-pink-600 font-bold bg-pink-50 px-3 py-2 rounded-lg"
+      : "text-gray-600 hover:text-pink-600 hover:bg-gray-50 px-3 py-2 rounded-lg transition";
   };
 
   return (
