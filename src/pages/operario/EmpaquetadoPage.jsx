@@ -1,97 +1,126 @@
-import { useState } from 'react';
-
-const LOTES_APROBADOS = [
-  { id: 1, codigoLote: 'L2026-001', producto: 'Helado Chocolate', presentacion: 'Palitos de crema', cantidad: 50, estado: 'Pendiente' },
-  { id: 2, codigoLote: 'L2026-003', producto: 'Torta Oreo', presentacion: 'Torta helada', cantidad: 10, estado: 'Pendiente' },
-  { id: 3, codigoLote: 'L2026-004', producto: 'Balde Chocolate 10L', presentacion: 'Baldes', cantidad: 25, estado: 'Pendiente' }
-];
+import { useState, useEffect } from 'react';
+import frizkyApi from '../../api/frizkyApi';
 
 function EmpaquetadoPage() {
-  const [lotes, setLotes] = useState(LOTES_APROBADOS);
-  const [loteActivo, setLoteActivo] = useState(null);
+  const [lotesAprobados, setLotesAprobados] = useState([]);
+  const [productos, setProductos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [procesandoId, setProcesandoId] = useState(null);
 
-  const pendientes = lotes.filter(l => l.estado === 'Pendiente');
-  const empaquetados = lotes.filter(l => l.estado === 'Empaquetado');
+  const cargarDatos = async () => {
+    setCargando(true);
+    try {
+      const [resLotes, resProductos] = await Promise.all([
+        frizkyApi.get('/Lotes'),
+        frizkyApi.get('/Productos')
+      ]);
+      
+      setProductos(resProductos.data);
+      // Solo mostramos los lotes que pasaron el Control de Calidad
+      setLotesAprobados(resLotes.data.filter(lote => lote.estado === 'Aprobado'));
+    } catch (error) {
+      console.error("Error al cargar datos:", error);
+    } finally {
+      setCargando(false);
+    }
+  };
 
-  const manejarEmpaque = (id, nuevoEstado) => {
-    setLotes(lotes.map(l => l.id === id ? { ...l, estado: nuevoEstado } : l));
-    setLoteActivo(null);
+  useEffect(() => {
+    cargarDatos();
+  }, []);
+
+  const getNombreProducto = (productoId) => {
+    const prod = productos.find(p => p.id === productoId);
+    return prod ? `${prod.tipoPresentacion} - ${prod.sabor}` : 'Producto Desconocido';
+  };
+
+  const registrarEmpaque = async (lote) => {
+    setProcesandoId(lote.id);
+    try {
+      // 1. Movemos el lote al siguiente estado en la cadena (PUT)
+      const loteActualizado = { ...lote, estado: 'Empaquetado' };
+      await frizkyApi.put(`/Lotes/${lote.id}`, loteActualizado);
+
+      // 2. Generamos la trazabilidad inmutable de la acción (POST)
+      await frizkyApi.post('/RegistroActividad', {
+        usuarioId: 1, // Simulamos al operario ID 1 temporalmente
+        loteId: lote.id,
+        accion: 'Línea de Empaque',
+        observaciones: `Se envasaron y etiquetaron correctamente las ${lote.cantidad} unidades.`
+      });
+
+      // 3. Recargamos la vista
+      await cargarDatos();
+    } catch (error) {
+      console.error("Error al empaquetar:", error);
+      alert(`Hubo un error al registrar el empaque del lote ${lote.codigoLote}`);
+    } finally {
+      setProcesandoId(null);
+    }
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Empaquetado de Lotes</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          Registra el envasado de los lotes aprobados por control de calidad.
-        </p>
+        <h1 className="text-3xl font-bold text-gray-900">Línea de Empaquetado</h1>
+        <p className="text-gray-500 text-sm mt-1">Registrá el envasado y etiquetado de los lotes aprobados.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm flex flex-col">
-          <span className="text-orange-500 font-semibold text-sm">⚠️ Pendientes de Empaque</span>
-          <span className="text-4xl font-bold text-gray-800 mt-2">{pendientes.length}</span>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-green-200 shadow-sm flex flex-col">
-          <span className="text-green-600 font-semibold text-sm">✓ Empaquetados Hoy</span>
-          <span className="text-4xl font-bold text-gray-800 mt-2">{empaquetados.length}</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Cola de Empaquetado</h2>
-          {pendientes.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No hay lotes para empaquetar.</p>
-          ) : (
-            <div className="space-y-4">
-              {pendientes.map(lote => (
-                <div key={lote.id} className="border border-red-100 bg-red-50 rounded-lg p-4 flex justify-between items-center">
-                  <div>
-                    <h3 className="font-bold text-gray-900">{lote.codigoLote} <span className="text-xs bg-red-200 text-red-800 px-2 py-0.5 rounded ml-2">Urgente</span></h3>
-                    <p className="text-sm text-gray-700 mt-1">{lote.producto}</p>
-                    <p className="text-xs text-gray-500 mt-1">Presentación: {lote.presentacion} | Unidades: {lote.cantidad}</p>
-                  </div>
-                  <button 
-                    onClick={() => setLoteActivo(lote)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
-                  >
-                    Iniciar
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm h-fit">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Panel de Envasado</h2>
-          {!loteActivo ? (
-            <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
-              <span className="text-4xl block mb-2">📦</span>
-              <p className="text-sm">Selecciona un lote para iniciar el proceso.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                <p className="text-lg font-bold text-gray-900">{loteActivo.codigoLote}</p>
-                <p className="text-sm text-gray-700">{loteActivo.producto}</p>
-                <p className="text-sm font-medium mt-2">A envasar: {loteActivo.cantidad} {loteActivo.presentacion}</p>
-              </div>
-              <button 
-                onClick={() => manejarEmpaque(loteActivo.id, 'Empaquetado')}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition"
-              >
-                ✓ Finalizar Empaque
-              </button>
-              <button 
-                onClick={() => setLoteActivo(null)}
-                className="w-full text-gray-500 hover:text-gray-700 text-sm font-medium py-2"
-              >
-                Cancelar
-              </button>
-            </div>
-          )}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-purple-50 border-b border-purple-100">
+                <th className="px-6 py-4 text-xs font-semibold text-purple-700 uppercase tracking-wider">Código Lote</th>
+                <th className="px-6 py-4 text-xs font-semibold text-purple-700 uppercase tracking-wider">Producto</th>
+                <th className="px-6 py-4 text-xs font-semibold text-purple-700 uppercase tracking-wider">Cantidad a Envasar</th>
+                <th className="px-6 py-4 text-xs font-semibold text-purple-700 uppercase tracking-wider text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {cargando ? (
+                <tr>
+                  <td colSpan="4" className="px-6 py-12 text-center text-gray-500 font-medium">
+                    <div className="flex justify-center items-center gap-3">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600"></div>
+                      Buscando lotes aprobados...
+                    </div>
+                  </td>
+                </tr>
+              ) : lotesAprobados.length === 0 ? (
+                <tr>
+                  <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
+                    <span className="text-3xl block mb-2">📦</span>
+                    No hay lotes esperando ser empaquetados.
+                  </td>
+                </tr>
+              ) : (
+                lotesAprobados.map((lote) => (
+                  <tr key={lote.id} className="hover:bg-gray-50 transition">
+                    <td className="px-6 py-4 font-bold text-gray-900">{lote.codigoLote}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{getNombreProducto(lote.productoId)}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-700">{lote.cantidad} uds.</td>
+                    <td className="px-6 py-4 text-right">
+                      <button 
+                        onClick={() => registrarEmpaque(lote)}
+                        disabled={procesandoId === lote.id}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-5 rounded-lg transition text-sm disabled:opacity-50 disabled:cursor-not-allowed shadow-sm flex items-center gap-2 ml-auto"
+                      >
+                        {procesandoId === lote.id ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            Procesando...
+                          </>
+                        ) : (
+                          'Confirmar Empaque →'
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

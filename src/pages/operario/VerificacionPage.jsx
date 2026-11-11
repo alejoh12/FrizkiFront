@@ -1,132 +1,132 @@
-import { useState } from 'react';
-
-const LOTES_MOCK = [
-  { id: 1, codigoLote: 'L2026-001', producto: 'Helado Chocolate', categoria: 'Palitos de crema', cantidad: 50, vencimiento: '30/12/2026', estado: 'Pendiente' },
-  { id: 2, codigoLote: 'L2026-002', producto: 'Helado Frutilla', categoria: 'Palitos de agua', cantidad: 40, vencimiento: '29/11/2026', estado: 'Pendiente' },
-  { id: 3, codigoLote: 'L2026-003', producto: 'Torta Oreo', categoria: 'Torta helada', cantidad: 10, vencimiento: '14/10/2026', estado: 'Pendiente' },
-  { id: 4, codigoLote: 'L2026-004', producto: 'Balde Chocolate 10L', categoria: 'Baldes', cantidad: 25, vencimiento: '30/01/2027', estado: 'Pendiente' }
-];
+import { useState, useEffect } from 'react';
+import frizkyApi from '../../api/frizkyApi';
 
 function VerificacionPage() {
-  const [lotes, setLotes] = useState(LOTES_MOCK);
-  const [loteActivo, setLoteActivo] = useState(null);
+  const [lotesPendientes, setLotesPendientes] = useState([]);
+  const [productos, setProductos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [procesandoId, setProcesandoId] = useState(null);
 
-  const pendientes = lotes.filter(l => l.estado === 'Pendiente');
-  const verificados = lotes.filter(l => l.estado === 'Aprobado');
-  const rechazados = lotes.filter(l => l.estado === 'Rechazado');
+  const cargarDatos = async () => {
+    setCargando(true);
+    try {
+      // Pedimos los lotes y los productos en paralelo
+      const [resLotes, resProductos] = await Promise.all([
+        frizkyApi.get('/Lotes'),
+        frizkyApi.get('/Productos')
+      ]);
+      
+      setProductos(resProductos.data);
+      // Filtramos estrictamente los que acaban de ingresar
+      setLotesPendientes(resLotes.data.filter(lote => lote.estado === 'Pendiente'));
+    } catch (error) {
+      console.error("Error al cargar datos:", error);
+    } finally {
+      setCargando(false);
+    }
+  };
 
-  const manejarVerificacion = (nuevoEstado) => {
-    if (!loteActivo) return;
-    setLotes(lotes.map(l => l.id === loteActivo.id ? { ...l, estado: nuevoEstado } : l));
-    setLoteActivo(null);
+  useEffect(() => {
+    cargarDatos();
+  }, []);
+
+  // Función auxiliar para cruzar el ID del producto con su nombre real
+  const getNombreProducto = (productoId) => {
+    const prod = productos.find(p => p.id === productoId);
+    return prod ? `${prod.tipoPresentacion} - ${prod.sabor}` : 'Producto Desconocido';
+  };
+
+  const cambiarEstadoLote = async (lote, nuevoEstado) => {
+    setProcesandoId(lote.id);
+    try {
+      // 1. Actualizamos el estado del lote (PUT)
+      const loteActualizado = { ...lote, estado: nuevoEstado };
+      await frizkyApi.put(`/Lotes/${lote.id}`, loteActualizado);
+
+      // 2. Dejamos asentado el movimiento en el Registro de Actividad (POST)
+      await frizkyApi.post('/RegistroActividad', {
+        usuarioId: 1, // Simulamos al operario ID 1
+        loteId: lote.id,
+        accion: `Control de Calidad: Lote ${nuevoEstado.toUpperCase()}`,
+        observaciones: `El operario verificó la muestra y determinó el estado: ${nuevoEstado}`
+      });
+
+      // 3. Recargamos la tabla para que el lote desaparezca de esta vista
+      await cargarDatos();
+    } catch (error) {
+      console.error(`Error al marcar como ${nuevoEstado}:`, error);
+      alert(`Hubo un error al intentar cambiar el estado del lote ${lote.codigoLote}`);
+    } finally {
+      setProcesandoId(null);
+    }
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Verificación de Productos</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          Verifica la calidad de los lotes de helado antes de su almacenamiento.
-        </p>
+        <h1 className="text-3xl font-bold text-gray-900">Control de Calidad</h1>
+        <p className="text-gray-500 text-sm mt-1">Verificá los lotes ingresados antes de pasarlos a la línea de empaquetado.</p>
       </div>
 
-      {/* Tarjetas de Métricas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm flex flex-col">
-          <span className="text-orange-500 font-semibold text-sm flex items-center gap-2">
-            ⚠️ Pendientes
-          </span>
-          <span className="text-4xl font-bold text-gray-800 mt-2">{pendientes.length}</span>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-green-200 shadow-sm flex flex-col">
-          <span className="text-green-600 font-semibold text-sm flex items-center gap-2">
-            ✓ Verificados
-          </span>
-          <span className="text-4xl font-bold text-gray-800 mt-2">{verificados.length}</span>
-        </div>
-        <div className="bg-white p-4 rounded-xl border border-red-200 shadow-sm flex flex-col">
-          <span className="text-red-500 font-semibold text-sm flex items-center gap-2">
-            ✕ Rechazados
-          </span>
-          <span className="text-4xl font-bold text-gray-800 mt-2">{rechazados.length}</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Lista de Lotes Pendientes */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Lotes a Verificar</h2>
-          
-          {pendientes.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No hay lotes pendientes de verificación.</p>
-          ) : (
-            <div className="space-y-4">
-              {pendientes.map(lote => (
-                <div key={lote.id} className="border border-gray-100 rounded-lg p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50 hover:bg-white transition">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-bold text-gray-800">{lote.producto}</h3>
-                      <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded font-medium">Pendiente</span>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Código Lote</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Producto</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Cantidad</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Elaboración</th>
+                <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider text-right">Acciones de Calidad</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {cargando ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-12 text-center text-gray-500 font-medium">
+                    <div className="flex justify-center items-center gap-3">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-pink-600"></div>
+                      Cargando lotes pendientes...
                     </div>
-                    <p className="text-sm text-gray-500">
-                      Categoría: {lote.categoria} | Cantidad: {lote.cantidad} un.
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">Lote: {lote.codigoLote} - Vence: {lote.vencimiento}</p>
-                  </div>
-                  <button 
-                    onClick={() => setLoteActivo(lote)}
-                    className="mt-3 sm:mt-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
-                  >
-                    Verificar
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Panel de Acción Lateral */}
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm h-fit">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <span>🔍</span> Panel de Control
-          </h2>
-
-          {!loteActivo ? (
-            <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
-              <span className="text-4xl block mb-2">📦</span>
-              <p className="text-sm">Selecciona un lote de la lista para iniciar su inspección de calidad.</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1">Inspeccionando</p>
-                <p className="text-lg font-bold text-gray-900">{loteActivo.codigoLote}</p>
-                <p className="text-sm text-gray-700">{loteActivo.producto}</p>
-                <p className="text-sm text-gray-600 mt-2 font-medium">Volumen: {loteActivo.cantidad} unidades</p>
-              </div>
-
-              <div className="space-y-3">
-                <button 
-                  onClick={() => manejarVerificacion('Aprobado')}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition"
-                >
-                  ✓ Aprobar Lote
-                </button>
-                <button 
-                  onClick={() => manejarVerificacion('Rechazado')}
-                  className="w-full bg-red-100 hover:bg-red-200 text-red-700 font-bold py-3 px-4 rounded-lg transition"
-                >
-                  ✕ Rechazar Lote
-                </button>
-                <button 
-                  onClick={() => setLoteActivo(null)}
-                  className="w-full text-gray-500 hover:text-gray-700 text-sm font-medium py-2 mt-2"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          )}
+                  </td>
+                </tr>
+              ) : lotesPendientes.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                    <span className="text-3xl block mb-2">✨</span>
+                    No hay lotes pendientes de verificación en este momento.
+                  </td>
+                </tr>
+              ) : (
+                lotesPendientes.map((lote) => (
+                  <tr key={lote.id} className="hover:bg-gray-50 transition">
+                    <td className="px-6 py-4 font-bold text-gray-900">{lote.codigoLote}</td>
+                    <td className="px-6 py-4 text-sm text-gray-600">{getNombreProducto(lote.productoId)}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-700">{lote.cantidad} uds.</td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {new Date(lote.fechaElaboracion).toLocaleDateString('es-AR')}
+                    </td>
+                    <td className="px-6 py-4 text-right space-x-2">
+                      <button 
+                        onClick={() => cambiarEstadoLote(lote, 'Aprobado')}
+                        disabled={procesandoId === lote.id}
+                        className="bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 font-semibold py-1.5 px-4 rounded-lg transition text-sm disabled:opacity-50"
+                      >
+                        {procesandoId === lote.id ? '...' : '✓ Aprobar'}
+                      </button>
+                      <button 
+                        onClick={() => cambiarEstadoLote(lote, 'Rechazado')}
+                        disabled={procesandoId === lote.id}
+                        className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-semibold py-1.5 px-4 rounded-lg transition text-sm disabled:opacity-50"
+                      >
+                        {procesandoId === lote.id ? '...' : '✕ Rechazar'}
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
