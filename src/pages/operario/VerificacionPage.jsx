@@ -1,133 +1,254 @@
-import { useState } from 'react';
-
-const LOTES_MOCK = [
-  { id: 1, codigoLote: 'L2026-001', producto: 'Helado Chocolate', categoria: 'Palitos de crema', cantidad: 50, vencimiento: '30/12/2026', estado: 'Pendiente' },
-  { id: 2, codigoLote: 'L2026-002', producto: 'Helado Frutilla', categoria: 'Palitos de agua', cantidad: 40, vencimiento: '29/11/2026', estado: 'Pendiente' },
-  { id: 3, codigoLote: 'L2026-003', producto: 'Torta Oreo', categoria: 'Torta helada', cantidad: 10, vencimiento: '14/10/2026', estado: 'Pendiente' },
-  { id: 4, codigoLote: 'L2026-004', producto: 'Balde Chocolate 10L', categoria: 'Baldes', cantidad: 25, vencimiento: '30/01/2027', estado: 'Pendiente' }
-];
+import { useState, useEffect } from 'react';
+import frizkyApi from '../../api/frizkyApi';
 
 function VerificacionPage() {
-  const [lotes, setLotes] = useState(LOTES_MOCK);
-  const [loteActivo, setLoteActivo] = useState(null);
+  const [todosLosLotes, setTodosLosLotes] = useState([]);
+  const [productos, setProductos] = useState([]);
+  const [loteSeleccionado, setLoteSeleccionado] = useState(null);
+  const [observaciones, setObservaciones] = useState('');
+  const [cargando, setCargando] = useState(true);
+  const [procesando, setProcesando] = useState(false);
 
-  const pendientes = lotes.filter(l => l.estado === 'Pendiente');
-  const verificados = lotes.filter(l => l.estado === 'Aprobado');
-  const rechazados = lotes.filter(l => l.estado === 'Rechazado');
+  const cargarDatos = async () => {
+    setCargando(true);
+    try {
+      const [resLotes, resProductos] = await Promise.all([
+        frizkyApi.get('/Lotes'),
+        frizkyApi.get('/Productos')
+      ]);
 
-  const manejarVerificacion = (nuevoEstado) => {
-    if (!loteActivo) return;
-    setLotes(lotes.map(l => l.id === loteActivo.id ? { ...l, estado: nuevoEstado } : l));
-    setLoteActivo(null);
+      setProductos(resProductos.data);
+      setTodosLosLotes(resLotes.data);
+    } catch (error) {
+      console.error("Error al cargar datos:", error);
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarDatos();
+  }, []);
+
+  const getProducto = (productoId) => {
+    return productos.find(p => p.id === productoId);
+  };
+
+  const getNombreProducto = (productoId) => {
+    const prod = getProducto(productoId);
+    return prod ? `${prod.tipoPresentacion} - ${prod.sabor}` : 'Producto Desconocido';
+  };
+
+  // Contadores para las 3 tarjetas superiores
+  const lotesPendientes = todosLosLotes.filter(l => l.estado === 'Pendiente');
+  const cantidadVerificados = todosLosLotes.filter(
+    l => l.estado === 'Aprobado' || l.estado === 'Empaquetado' || l.estado === 'Almacenado'
+  ).length;
+  const cantidadRechazados = todosLosLotes.filter(l => l.estado === 'Rechazado').length;
+
+  const seleccionarLote = (lote) => {
+    setLoteSeleccionado(lote);
+    setObservaciones('');
+  };
+
+  const cambiarEstadoLote = async (nuevoEstado) => {
+    if (!loteSeleccionado) return;
+    setProcesando(true);
+
+    try {
+      // 1. Actualizamos el estado del lote (PUT)
+      const loteActualizado = { ...loteSeleccionado, estado: nuevoEstado };
+      await frizkyApi.put(`/Lotes/${loteSeleccionado.id}`, loteActualizado);
+
+      // 2. Dejamos asentado el movimiento en el Registro de Actividad (POST)
+      const textoObs = observaciones.trim()
+        ? observaciones.trim()
+        : `El operario verificó la muestra y determinó el estado: ${nuevoEstado}`;
+
+      await frizkyApi.post('/RegistroActividad', {
+        usuarioId: 1,
+        loteId: loteSeleccionado.id,
+        accion: `Control de Calidad: Lote ${nuevoEstado.toUpperCase()}`,
+        observaciones: textoObs
+      });
+
+      // 3. Limpiamos el panel derecho y recargamos los datos
+      setLoteSeleccionado(null);
+      setObservaciones('');
+      await cargarDatos();
+    } catch (error) {
+      console.error(`Error al marcar como ${nuevoEstado}:`, error);
+      alert(`Hubo un error al intentar cambiar el estado del lote ${loteSeleccionado.codigoLote}`);
+    } finally {
+      setProcesando(false);
+    }
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Encabezado */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Verificación de Productos</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          Verifica la calidad de los lotes de helado antes de su almacenamiento.
-        </p>
+        <p className="text-gray-500 text-sm mt-1">Verifica la calidad de los lotes de helado antes de su almacenamiento.</p>
       </div>
 
-      {/* Tarjetas de Métricas */}
+      {/* 3 Tarjetas de Contadores Superiores */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm flex flex-col">
-          <span className="text-orange-500 font-semibold text-sm flex items-center gap-2">
-            ⚠️ Pendientes
-          </span>
-          <span className="text-4xl font-bold text-gray-800 mt-2">{pendientes.length}</span>
+        <div className="bg-white rounded-xl shadow-sm border border-orange-200 p-6">
+          <div className="flex items-center gap-2 text-orange-500 font-semibold text-sm mb-2">
+            <span>⚠️</span> Pendientes
+          </div>
+          <p className="text-3xl font-bold text-gray-900">{lotesPendientes.length}</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-green-200 shadow-sm flex flex-col">
-          <span className="text-green-600 font-semibold text-sm flex items-center gap-2">
-            ✓ Verificados
-          </span>
-          <span className="text-4xl font-bold text-gray-800 mt-2">{verificados.length}</span>
+
+        <div className="bg-white rounded-xl shadow-sm border border-green-200 p-6">
+          <div className="flex items-center gap-2 text-green-600 font-semibold text-sm mb-2">
+            <span>✓</span> Verificados
+          </div>
+          <p className="text-3xl font-bold text-gray-900">{cantidadVerificados}</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-red-200 shadow-sm flex flex-col">
-          <span className="text-red-500 font-semibold text-sm flex items-center gap-2">
-            ✕ Rechazados
-          </span>
-          <span className="text-4xl font-bold text-gray-800 mt-2">{rechazados.length}</span>
+
+        <div className="bg-white rounded-xl shadow-sm border border-red-200 p-6">
+          <div className="flex items-center gap-2 text-red-500 font-semibold text-sm mb-2">
+            <span>✕</span> Rechazados
+          </div>
+          <p className="text-3xl font-bold text-gray-900">{cantidadRechazados}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Lista de Lotes Pendientes */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Lotes a Verificar</h2>
-          
-          {pendientes.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No hay lotes pendientes de verificación.</p>
+      {/* Layout Principal: Izquierda (Lista) - Derecha (Panel de Control) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+        
+        {/* COLUMNA IZQUIERDA (2/3): Lotes a Verificar */}
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">Lotes a Verificar</h2>
+
+          {cargando ? (
+            <div className="flex justify-center items-center py-12 gap-3 text-gray-500">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-pink-600"></div>
+              Cargando lotes pendientes...
+            </div>
+          ) : lotesPendientes.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <span className="text-3xl block mb-2">✨</span>
+              No hay lotes pendientes de verificación en este momento.
+            </div>
           ) : (
             <div className="space-y-4">
-              {pendientes.map(lote => (
-                <div key={lote.id} className="border border-gray-100 rounded-lg p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50 hover:bg-white transition">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-bold text-gray-800">{lote.producto}</h3>
-                      <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded font-medium">Pendiente</span>
-                    </div>
-                    <p className="text-sm text-gray-500">
-                      Categoría: {lote.categoria} | Cantidad: {lote.cantidad} un.
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">Lote: {lote.codigoLote} - Vence: {lote.vencimiento}</p>
-                  </div>
-                  <button 
-                    onClick={() => setLoteActivo(lote)}
-                    className="mt-3 sm:mt-0 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
+              {lotesPendientes.map((lote) => {
+                const prod = getProducto(lote.productoId);
+                const estaSeleccionado = loteSeleccionado?.id === lote.id;
+
+                return (
+                  <div
+                    key={lote.id}
+                    className={`p-5 rounded-xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                      estaSeleccionado
+                        ? 'border-blue-500 bg-blue-50/30 ring-1 ring-blue-500'
+                        : 'border-gray-200 hover:border-gray-300 bg-white'
+                    }`}
                   >
-                    Verificar
-                  </button>
-                </div>
-              ))}
+                    <div>
+                      <div className="flex items-center gap-2.5 mb-1">
+                        <h3 className="font-bold text-gray-900 text-base">
+                          {prod ? `Helado ${prod.sabor}` : getNombreProducto(lote.productoId)}
+                        </h3>
+                        <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-orange-100 text-orange-700">
+                          {lote.estado}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        Categoría: {prod?.tipoPresentacion || 'General'} | Cantidad: <strong>{lote.cantidad} un.</strong>
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Lote: {lote.codigoLote} · Vence: {new Date(lote.fechaVencimiento).toLocaleDateString('es-AR')}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => seleccionarLote(lote)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-5 rounded-lg transition text-sm shrink-0"
+                    >
+                      Verificar
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Panel de Acción Lateral */}
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm h-fit">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+        {/* COLUMNA DERECHA (1/3): Panel de Control */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sticky top-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
             <span>🔍</span> Panel de Control
           </h2>
 
-          {!loteActivo ? (
-            <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
-              <span className="text-4xl block mb-2">📦</span>
-              <p className="text-sm">Selecciona un lote de la lista para iniciar su inspección de calidad.</p>
+          {!loteSeleccionado ? (
+            <div className="border-2 border-dashed border-gray-200 rounded-xl p-10 text-center flex flex-col items-center justify-center min-h-[260px]">
+              <span className="text-4xl mb-3">📦</span>
+              <p className="text-sm text-gray-400 max-w-[200px]">
+                Selecciona un lote de la lista para iniciar su inspección de calidad.
+              </p>
             </div>
           ) : (
-            <div className="space-y-6">
-              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                <p className="text-xs text-blue-600 font-bold uppercase tracking-wider mb-1">Inspeccionando</p>
-                <p className="text-lg font-bold text-gray-900">{loteActivo.codigoLote}</p>
-                <p className="text-sm text-gray-700">{loteActivo.producto}</p>
-                <p className="text-sm text-gray-600 mt-2 font-medium">Volumen: {loteActivo.cantidad} unidades</p>
+            <div className="space-y-5">
+              {/* Detalle del lote en inspección */}
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                    En Inspección
+                  </span>
+                  <button
+                    onClick={() => setLoteSeleccionado(null)}
+                    className="text-xs text-gray-400 hover:text-gray-600"
+                  >
+                    Cancelar ✕
+                  </button>
+                </div>
+                <p className="font-bold text-gray-900 text-base">{loteSeleccionado.codigoLote}</p>
+                <p className="text-sm text-gray-700">{getNombreProducto(loteSeleccionado.productoId)}</p>
+                <p className="text-xs text-gray-500">
+                  Cantidad: {loteSeleccionado.cantidad} uds. · Elab:{' '}
+                  {new Date(loteSeleccionado.fechaElaboracion).toLocaleDateString('es-AR')}
+                </p>
               </div>
 
-              <div className="space-y-3">
-                <button 
-                  onClick={() => manejarVerificacion('Aprobado')}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition"
+              {/* Observaciones de calidad */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Observaciones de Calidad (Opcional)
+                </label>
+                <textarea
+                  rows="3"
+                  value={observaciones}
+                  onChange={(e) => setObservaciones(e.target.value)}
+                  placeholder="Ej: Temperatura óptima (-18°C), textura y sellado correctos..."
+                  className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Botones de Decisión */}
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={() => cambiarEstadoLote('Rechazado')}
+                  disabled={procesando}
+                  className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold py-2.5 px-4 rounded-lg transition text-sm disabled:opacity-50"
                 >
-                  ✓ Aprobar Lote
+                  {procesando ? '...' : '✕ Rechazar'}
                 </button>
-                <button 
-                  onClick={() => manejarVerificacion('Rechazado')}
-                  className="w-full bg-red-100 hover:bg-red-200 text-red-700 font-bold py-3 px-4 rounded-lg transition"
+                <button
+                  onClick={() => cambiarEstadoLote('Aprobado')}
+                  disabled={procesando}
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-lg transition text-sm shadow-sm disabled:opacity-50"
                 >
-                  ✕ Rechazar Lote
-                </button>
-                <button 
-                  onClick={() => setLoteActivo(null)}
-                  className="w-full text-gray-500 hover:text-gray-700 text-sm font-medium py-2 mt-2"
-                >
-                  Cancelar
+                  {procesando ? '...' : '✓ Aprobar'}
                 </button>
               </div>
             </div>
           )}
         </div>
+
       </div>
     </div>
   );

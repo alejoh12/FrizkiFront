@@ -1,85 +1,87 @@
-import { useState } from 'react';
-import ProductCard from '../../components/ProductCard';
+import { useState, useEffect } from 'react';
+import frizkyApi from '../../api/frizkyApi';
 
-const PRODUCTOS_MOCK = [
-  {
-    id: 1,
-    nombre: 'Frutilla',
-    tipoPresentacion: 'Palitos de agua',
-    precio: 1.50,
-    disponible: true,
-    imagenUrl: 'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?w=500&auto=format&fit=crop&q=60'
-  },
-  {
-    id: 2,
-    nombre: 'Limón',
-    tipoPresentacion: 'Palitos de agua',
-    precio: 1.50,
-    disponible: true,
-    imagenUrl: 'https://images.unsplash.com/photo-1501443762994-82bd5dace89a?w=500&auto=format&fit=crop&q=60'
-  },
-  {
-    id: 3,
-    nombre: 'Naranja',
-    tipoPresentacion: 'Palitos de agua',
-    precio: 1.50,
-    disponible: false,
-    imagenUrl: 'https://images.unsplash.com/photo-1534706936160-d5ee67737249?w=500&auto=format&fit=crop&q=60'
-  },
-  {
-    id: 4,
-    nombre: 'Dulce de Leche Granizado',
-    tipoPresentacion: 'Palitos de crema',
-    precio: 2.00,
-    disponible: true,
-    imagenUrl: 'https://images.unsplash.com/photo-1570197788417-0e82375c9371?w=500&auto=format&fit=crop&q=60'
-  },
-  {
-    id: 5,
-    nombre: 'Chocolate Marroquí 10L',
-    tipoPresentacion: 'Baldes',
-    precio: 15.00,
-    disponible: true,
-    imagenUrl: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=500&auto=format&fit=crop&q=60'
-  },
-  {
-    id: 6,
-    nombre: 'Torta Helada Oreo',
-    tipoPresentacion: 'Torta helada',
-    precio: 25.00,
-    disponible: true,
-    imagenUrl: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=500&auto=format&fit=crop&q=60'
-  }
+const CATEGORIAS = [
+  'Todas',
+  'Balde 10L',
+  'Vasito 120cc',
+  'Palito de Agua',
+  'Palitos de crema',
+  'Torta helada',
+  'Alfajores helados Frisky',
+  'Conos Frisky Gold'
 ];
 
-const CATEGORIAS = ['Todas', 'Palitos de agua', 'Palitos de crema', 'Baldes', 'Torta helada'];
-
-function ProductPage() {
+function ProductosPage() {
+  const [productos, setProductos] = useState([]);
   const [categoriaActiva, setCategoriaActiva] = useState('Todas');
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    const obtenerCatalogoConStock = async () => {
+      try {
+        // Consultamos productos y lotes en paralelo
+        const [resProductos, resLotes] = await Promise.all([
+          frizkyApi.get('/Productos'),
+          frizkyApi.get('/Lotes')
+        ]);
+
+        const lotes = resLotes.data;
+
+        const productosMapeados = resProductos.data.map(p => {
+          // Calculamos el stock real en cámara de frío ('Almacenado') para este producto
+          const stockAlmacenado = lotes
+            .filter(l => l.productoId === p.id && l.estado?.toLowerCase() === 'almacenado')
+            .reduce((acum, l) => acum + (Number(l.cantidad) || 0), 0);
+
+          return {
+            id: p.id,
+            nombre: p.sabor,
+            categoria: p.tipoPresentacion,
+            precio: p.precio,
+            descripcion: p.descripcion,
+            imagenUrl: p.imagenUrl,
+            stock: stockAlmacenado,
+            disponible: stockAlmacenado > 0
+          };
+        });
+
+        setProductos(productosMapeados);
+      } catch (error) {
+        console.error("Error al conectar con la API de Frizky:", error);
+      } finally {
+        setCargando(false);
+      }
+    };
+
+    obtenerCatalogoConStock();
+  }, []);
 
   const productosFiltrados = categoriaActiva === 'Todas'
-    ? PRODUCTOS_MOCK
-    : PRODUCTOS_MOCK.filter(p => p.tipoPresentacion === categoriaActiva);
+    ? productos
+    : productos.filter(
+        p => p.categoria?.toLowerCase() === categoriaActiva.toLowerCase()
+      );
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Catálogo de Productos</h1>
         <p className="text-gray-500 text-sm mt-1">
-          Visualización de presentaciones y productos disponibles en la fábrica.
+          Visualización de presentaciones y disponibilidad real según stock en cámara de frío.
         </p>
       </div>
 
-      {/* Botones de Filtro por Categoría */}
-      <div className="flex flex-wrap gap-2 mb-8 border-b border-gray-200 pb-4">
+      {/* Filtros de Categoría */}
+      <div className="flex flex-wrap gap-2 mb-8">
         {CATEGORIAS.map(cat => (
           <button
             key={cat}
             onClick={() => setCategoriaActiva(cat)}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition ${
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${
               categoriaActiva === cat
                 ? 'bg-pink-600 text-white shadow-sm'
-                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
             }`}
           >
             {cat}
@@ -87,14 +89,75 @@ function ProductPage() {
         ))}
       </div>
 
-      {/* Rejilla de Tarjetas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {productosFiltrados.map(prod => (
-          <ProductCard key={prod.id} producto={prod} />
-        ))}
-      </div>
+      {cargando ? (
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-600"></div>
+        </div>
+      ) : productosFiltrados.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <span className="text-4xl block mb-2">🍦</span>
+          <p>No hay productos cargados en esta categoría.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {productosFiltrados.map(prod => (
+            <div
+              key={prod.id}
+              className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition group flex flex-col justify-between ${
+                !prod.disponible ? 'opacity-75' : ''
+              }`}
+            >
+              {/* Imagen y Badge Dinámico */}
+              <div className="h-48 bg-gray-100 relative overflow-hidden">
+                <img
+                  src={prod.imagenUrl || 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=500&auto=format&fit=crop&q=60'}
+                  alt={prod.nombre}
+                  className={`w-full h-full object-cover group-hover:scale-105 transition duration-300 ${
+                    !prod.disponible ? 'grayscale-[40%]' : ''
+                  }`}
+                />
+                <div className="absolute top-3 right-3">
+                  {prod.disponible ? (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full shadow-sm bg-green-100 text-green-700 flex items-center gap-1">
+                      ✓ Disponible
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full shadow-sm bg-red-100 text-red-700 flex items-center gap-1">
+                      ✕ Sin Stock
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Información del Producto */}
+              <div className="p-5 flex flex-col flex-grow justify-between">
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">
+                    {prod.categoria}
+                  </p>
+                  <h3 className="font-bold text-gray-800 text-lg leading-tight mb-2">
+                    {prod.nombre}
+                  </h3>
+                  {prod.descripcion && (
+                    <p className="text-xs text-gray-500 line-clamp-2">{prod.descripcion}</p>
+                  )}
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                  <span className="text-xl font-bold text-pink-600">
+                    ${Number(prod.precio).toFixed(2)}
+                  </span>
+                  <span className="text-xs font-medium text-gray-400">
+                    {prod.disponible ? `${prod.stock} uds. en cámara` : 'Agotado'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-export default ProductPage;
+export default ProductosPage;
