@@ -72,7 +72,7 @@ function Login() {
                 <h2 className="text-xl font-bold text-gray-800 mb-2">{rol.id}</h2>
                 <p className="text-sm text-gray-500 mb-8 flex-grow">{rol.desc}</p>
                 <button 
-                  onClick={() => setRolSeleccionado(rol)}
+                  onClick={() => rol.id === 'Cliente' ? navigate('/') : setRolSeleccionado(rol)}
                   className={`w-full text-white font-semibold py-2.5 rounded-lg transition ${rol.btnColor}`}
                 >
                   Ingresar

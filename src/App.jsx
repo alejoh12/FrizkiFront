@@ -10,6 +10,8 @@ import DashboardPage from "./pages/dueno/DashboardPage";
 import InventarioPage from "./pages/dueno/InventarioPage";
 import ProductosAdminPage from "./pages/dueno/ProductosAdminPage";
 import ConfiguracionPage from "./pages/dueno/ConfiguracionPage";
+import Footer from "./components/Footer";
+import NosotrosPage from "./pages/publico/NosotrosPage";
 
 function App() {
   return (
@@ -31,8 +33,10 @@ function App() {
             <Route path="/inventario" element={<InventarioPage />} />
             <Route path="/admin-productos" element={<ProductosAdminPage />} />
             <Route path="/configuracion" element={<ConfiguracionPage />} />
+            <Route path="/nosotros" element={<NosotrosPage />} />
           </Routes>
         </main>
+        <Footer />
       </div>
     </BrowserRouter>
   );
