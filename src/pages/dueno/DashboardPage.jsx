@@ -28,31 +28,47 @@ function DashboardPage() {
 
         setMetricas({ aprobados, empaquetados, rechazados });
 
-        // 2. Gráfico "Top Producción del Día"
+        // 2. Gráfico "Top Producción del Día" (con detalle de lo que aún no ingresó a cámara)
         const produccionPorProducto = {};
         lotes.forEach(lote => {
           if (lote.estado !== 'Rechazado' && lote.estado !== 'Pendiente') {
-            produccionPorProducto[lote.productoId] = (produccionPorProducto[lote.productoId] || 0) + lote.cantidad;
+            if (!produccionPorProducto[lote.productoId]) {
+              produccionPorProducto[lote.productoId] = { total: 0, sinAlmacenar: 0, estadosPendientes: new Set() };
+            }
+            produccionPorProducto[lote.productoId].total += lote.cantidad;
+
+            if (lote.estado !== 'Almacenado') {
+              produccionPorProducto[lote.productoId].sinAlmacenar += lote.cantidad;
+              produccionPorProducto[lote.productoId].estadosPendientes.add(lote.estado);
+            }
           }
         });
 
         const top = Object.keys(produccionPorProducto).map(id => {
           const prod = productos.find(p => p.id === parseInt(id));
+          const info = produccionPorProducto[id];
           return {
             nombre: prod ? `${prod.tipoPresentacion} - ${prod.sabor}` : 'Desconocido',
-            cantidad: produccionPorProducto[id]
+            cantidad: info.total,
+            sinAlmacenar: info.sinAlmacenar,
+            estados: Array.from(info.estadosPendientes).join(' / ')
           };
-        }).sort((a, b) => b.cantidad - a.cantidad).slice(0, 4); // Traemos los 4 más fabricados
+        }).sort((a, b) => b.cantidad - a.cantidad).slice(0, 4);
         
         setTopProduccion(top);
 
         // 3. Alertas de Stock Crítico
         const alertas = productos.map(prod => {
-          const stock = lotes
+          const stockAlmacenado = lotes
             .filter(l => l.productoId === prod.id && l.estado === 'Almacenado')
             .reduce((acc, l) => acc + l.cantidad, 0);
-          return { ...prod, stockActual: stock };
-        }).filter(p => p.stockActual <= 10).slice(0, 3); // Mostramos hasta 3 alertas
+
+          const stockEnProceso = lotes
+            .filter(l => l.productoId === prod.id && (l.estado === 'Aprobado' || l.estado === 'Empaquetado'))
+            .reduce((acc, l) => acc + l.cantidad, 0);
+
+          return { ...prod, stockActual: stockAlmacenado, enProceso: stockEnProceso };
+        }).filter(p => p.stockActual <= 10).slice(0, 3);
         
         setStockCritico(alertas);
 
@@ -65,6 +81,8 @@ function DashboardPage() {
     
     cargarDatos();
   }, []);
+
+  const maxProduccion = topProduccion.length > 0 ? topProduccion[0].cantidad : 1;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -109,12 +127,22 @@ function DashboardPage() {
               <div className="space-y-6">
                 {topProduccion.length === 0 ? <p className="text-gray-500 text-sm">No hay producción registrada.</p> : topProduccion.map((item, index) => (
                   <div key={index}>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="font-semibold text-gray-700">{index + 1}. {item.nombre}</span>
+                    <div className="flex flex-wrap justify-between items-center gap-2 text-sm mb-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-gray-700">{index + 1}. {item.nombre}</span>
+                        {item.sinAlmacenar > 0 && (
+                          <span className="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full border border-amber-200">
+                            ⏳ {item.sinAlmacenar} uds en {item.estados} (sin ingresar a cámara)
+                          </span>
+                        )}
+                      </div>
                       <span className="font-bold text-gray-500">{item.cantidad} uds</span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2.5">
-                      <div className="bg-purple-500 h-2.5 rounded-full" style={{ width: `${Math.min((item.cantidad / 500) * 100, 100)}%` }}></div>
+                      <div 
+                        className="bg-purple-500 h-2.5 rounded-full transition-all duration-500" 
+                        style={{ width: `${(item.cantidad / maxProduccion) * 100}%` }}
+                      ></div>
                     </div>
                   </div>
                 ))}
@@ -124,13 +152,20 @@ function DashboardPage() {
             {/* Panel lateral: Alertas Stock */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-between">
               <div>
-                <h2 className="text-lg font-bold text-red-600 mb-6 flex items-center gap-2"><span>🚨</span> Stock Crítico</h2>
+                <h2 className="text-lg font-bold text-red-600 mb-6 flex items-center gap-2"><span>🚨</span> Stock Crítico en Cámara</h2>
                 <div className="space-y-4">
                   {stockCritico.length === 0 ? <p className="text-gray-500 text-sm">No hay productos en estado crítico.</p> : stockCritico.map(item => (
                     <div key={item.id} className="bg-red-50 border border-red-100 rounded-lg p-4 flex justify-between items-center">
                       <div>
                         <p className="font-bold text-gray-900 text-sm">{item.tipoPresentacion} - {item.sabor}</p>
-                        <p className="text-xs text-red-600 mt-1">Stock actual: {item.stockActual} unidades</p>
+                        <p className="text-xs text-red-600 mt-1">
+                          En cámara: <span className="font-bold">{item.stockActual} uds</span>
+                          {item.enProceso > 0 && (
+                            <span className="ml-2 text-amber-700 font-semibold">
+                              ({item.enProceso} uds en planta sin almacenar)
+                            </span>
+                          )}
+                        </p>
                       </div>
                       <span className="bg-red-200 text-red-800 text-xs font-bold px-2.5 py-1 rounded">Crítico</span>
                     </div>

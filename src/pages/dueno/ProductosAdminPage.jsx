@@ -2,10 +2,22 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import frizkyApi from '../../api/frizkyApi';
 
+const CATEGORIAS = [
+  'Todas',
+  'Balde 10L',
+  'Vasito 120cc',
+  'Palito de Agua',
+  'Palitos de crema',
+  'Torta helada',
+  'Alfajores helados Frisky',
+  'Conos Frisky Gold'
+];
+
 function ProductosAdminPage() {
   const [productos, setProductos] = useState([]);
+  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('Todas');
   const [cargando, setCargando] = useState(true);
-  
+
   // Estados para manejar la vista del formulario
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [productoEditando, setProductoEditando] = useState(null);
@@ -54,15 +66,13 @@ function ProductosAdminPage() {
     try {
       const productoData = {
         ...data,
-        precio: parseFloat(data.precio) // Aseguramos que el precio sea número decimal para C#
+        precio: parseFloat(data.precio)
       };
 
       if (productoEditando) {
-        // Editar (PUT)
         productoData.id = productoEditando.id;
         await frizkyApi.put(`/Productos/${productoEditando.id}`, productoData);
       } else {
-        // Crear Nuevo (POST)
         await frizkyApi.post('/Productos', productoData);
       }
 
@@ -89,17 +99,25 @@ function ProductosAdminPage() {
     }
   };
 
+  // Filtrado por categoría
+  const productosFiltrados = categoriaSeleccionada === 'Todas'
+    ? productos
+    : productos.filter(
+        prod => prod.tipoPresentacion.toLowerCase() === categoriaSeleccionada.toLowerCase()
+      );
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex justify-between items-center mb-8">
+      {/* Encabezado */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Administración de Productos</h1>
-          <p className="text-gray-500 text-sm mt-1">Gestioná el catálogo, precios y presentaciones de Frizky.</p>
+          <h1 className="text-3xl font-bold text-gray-900">Gestión de Productos</h1>
+          <p className="text-gray-500 text-sm mt-1">Administra el catálogo de productos de la fábrica</p>
         </div>
         {!mostrarFormulario && (
-          <button 
+          <button
             onClick={abrirNuevo}
-            className="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2.5 px-6 rounded-lg transition shadow-sm"
+            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-6 rounded-lg transition shadow-sm self-start sm:self-auto"
           >
             + Nuevo Producto
           </button>
@@ -114,77 +132,74 @@ function ProductosAdminPage() {
           </h2>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Presentación *</label>
-                <select 
+                <label className="block text-sm font-medium text-gray-700 mb-1">Presentación / Categoría *</label>
+                <select
                   {...register("tipoPresentacion", { required: "Requerido" })}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-pink-500 outline-none bg-white"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
                 >
                   <option value="">Seleccionar...</option>
-                  <option value="Balde 10L">Balde 10L</option>
-                  <option value="Vasito 120cc">Vasito 120cc</option>
-                  <option value="Palito de Agua">Palito de Agua</option>
-                  <option value="Palitos de crema">Palito de Crema</option>
-                  <option value="Torta helada">Torta Helada</option>
+                  {CATEGORIAS.filter(cat => cat !== 'Todas').map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
                 </select>
                 {errors.tipoPresentacion && <p className="text-red-500 text-xs mt-1">{errors.tipoPresentacion.message}</p>}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Sabor / Nombre *</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="Ej: Dulce de Leche Granizado"
                   {...register("sabor", { required: "Requerido" })}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                 />
                 {errors.sabor && <p className="text-red-500 text-xs mt-1">{errors.sabor.message}</p>}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Precio Unitario ($) *</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   step="0.01"
                   {...register("precio", { required: "Requerido", min: 0 })}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                 />
                 {errors.precio && <p className="text-red-500 text-xs mt-1">{errors.precio.message}</p>}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">URL Imagen (Opcional)</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="https://ejemplo.com/foto.jpg"
                   {...register("imagenUrl")}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-pink-500 outline-none"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                 />
               </div>
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Descripción Breve</label>
-                <textarea 
+                <textarea
                   rows="2"
                   {...register("descripcion")}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-pink-500 outline-none resize-none"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none"
                 />
               </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setMostrarFormulario(false)}
                 className="px-5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg transition"
               >
                 Cancelar
               </button>
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={procesando}
-                className="bg-pink-600 hover:bg-pink-700 text-white font-bold py-2.5 px-6 rounded-lg transition shadow-sm disabled:opacity-50"
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-6 rounded-lg transition shadow-sm disabled:opacity-50"
               >
                 {procesando ? 'Guardando...' : 'Guardar Producto'}
               </button>
@@ -192,56 +207,88 @@ function ProductosAdminPage() {
           </form>
         </div>
       ) : (
-        /* Tabla de Productos */
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">ID</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Presentación</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Sabor</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-600 uppercase tracking-wider text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {cargando ? (
-                  <tr>
-                    <td colSpan="5" className="px-6 py-12 text-center text-gray-500">Cargando catálogo...</td>
-                  </tr>
-                ) : productos.length === 0 ? (
-                  <tr>
-                    <td colSpan="5" className="px-6 py-12 text-center text-gray-500">No hay productos registrados en el sistema.</td>
-                  </tr>
-                ) : (
-                  productos.map((prod) => (
-                    <tr key={prod.id} className="hover:bg-gray-50 transition">
-                      <td className="px-6 py-4 text-sm text-gray-500">#{prod.id}</td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-800">{prod.tipoPresentacion}</td>
-                      <td className="px-6 py-4 text-sm text-gray-700">{prod.sabor}</td>
-                      <td className="px-6 py-4 font-bold text-pink-600">${Number(prod.precio).toFixed(2)}</td>
-                      <td className="px-6 py-4 text-right space-x-2">
-                        <button 
-                          onClick={() => abrirEdicion(prod)}
-                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-1.5 px-3 rounded text-sm transition"
-                        >
-                          Editar
-                        </button>
-                        <button 
-                          onClick={() => eliminarProducto(prod.id, prod.sabor)}
-                          className="bg-red-50 hover:bg-red-100 text-red-600 font-medium py-1.5 px-3 rounded text-sm transition"
-                        >
-                          Eliminar
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+        <>
+          {/* Barra de Filtrado por Categoría (estilo mockup) */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-6">
+            <p className="text-xs font-bold text-gray-700 mb-3">Filtrar por Categoría</p>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIAS.map((cat) => {
+                const activo = categoriaSeleccionada === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setCategoriaSeleccionada(cat)}
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition border ${
+                      activo
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+
+          {/* Listado en Tarjetas Horizontales (estilo mockup) */}
+          {cargando ? (
+            <div className="flex justify-center py-16">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600"></div>
+            </div>
+          ) : productosFiltrados.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center text-gray-500">
+              {productos.length === 0
+                ? 'No hay productos registrados en el sistema.'
+                : `No hay productos cargados en la categoría "${categoriaSeleccionada}".`}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {productosFiltrados.map((prod) => (
+                <div
+                  key={prod.id}
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 hover:border-gray-300 transition p-5 flex items-center justify-between gap-4"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-bold text-gray-900">{prod.sabor}</h3>
+                      <span className="text-xs text-gray-400 font-medium">#{prod.id}</span>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-0.5">{prod.tipoPresentacion}</p>
+                    {prod.descripcion && (
+                      <p className="text-xs text-gray-400 mt-1 line-clamp-1">{prod.descripcion}</p>
+                    )}
+                    <p className="text-base font-bold text-purple-600 mt-2">
+                      ${Number(prod.precio).toFixed(2)}
+                    </p>
+                  </div>
+
+                  {/* Botones de Edición y Eliminación */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => abrirEdicion(prod)}
+                      title="Editar producto"
+                      className="p-2.5 rounded-lg border border-gray-200 text-orange-500 hover:bg-orange-50 hover:border-orange-200 transition"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => eliminarProducto(prod.id, `${prod.tipoPresentacion} - ${prod.sabor}`)}
+                      title="Eliminar producto"
+                      className="p-2.5 rounded-lg border border-gray-200 text-red-500 hover:bg-red-50 hover:border-red-200 transition"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
