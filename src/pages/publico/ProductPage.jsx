@@ -1,7 +1,16 @@
 import { useState, useEffect } from 'react';
 import frizkyApi from '../../api/frizkyApi';
 
-const CATEGORIAS = ['Todas', 'Balde 10L', 'Vasito 120cc', 'Palito de Agua', 'Palitos de crema', 'Torta helada'];
+const CATEGORIAS = [
+  'Todas',
+  'Balde 10L',
+  'Vasito 120cc',
+  'Palito de Agua',
+  'Palitos de crema',
+  'Torta helada',
+  'Alfajores helados Frisky',
+  'Conos Frisky Gold'
+];
 
 function ProductosPage() {
   const [productos, setProductos] = useState([]);
@@ -9,40 +18,58 @@ function ProductosPage() {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    const obtenerProductos = async () => {
+    const obtenerCatalogoConStock = async () => {
       try {
-        const respuesta = await frizkyApi.get('/Productos');
-        
-        const productosMapeados = respuesta.data.map(p => ({
-          id: p.id,
-          nombre: p.sabor, 
-          categoria: p.tipoPresentacion, 
-          precio: p.precio,
-          descripcion: p.descripcion,
-          imagenUrl: p.imagenUrl,
-          disponible: true 
-        }));
+        // Consultamos productos y lotes en paralelo
+        const [resProductos, resLotes] = await Promise.all([
+          frizkyApi.get('/Productos'),
+          frizkyApi.get('/Lotes')
+        ]);
+
+        const lotes = resLotes.data;
+
+        const productosMapeados = resProductos.data.map(p => {
+          // Calculamos el stock real en cámara de frío ('Almacenado') para este producto
+          const stockAlmacenado = lotes
+            .filter(l => l.productoId === p.id && l.estado?.toLowerCase() === 'almacenado')
+            .reduce((acum, l) => acum + (Number(l.cantidad) || 0), 0);
+
+          return {
+            id: p.id,
+            nombre: p.sabor,
+            categoria: p.tipoPresentacion,
+            precio: p.precio,
+            descripcion: p.descripcion,
+            imagenUrl: p.imagenUrl,
+            stock: stockAlmacenado,
+            disponible: stockAlmacenado > 0
+          };
+        });
 
         setProductos(productosMapeados);
-        setCargando(false);
       } catch (error) {
         console.error("Error al conectar con la API de Frizky:", error);
+      } finally {
         setCargando(false);
       }
     };
 
-    obtenerProductos();
+    obtenerCatalogoConStock();
   }, []);
 
-  const productosFiltrados = categoriaActiva === 'Todas' 
-    ? productos 
-    : productos.filter(p => p.categoria === categoriaActiva);
+  const productosFiltrados = categoriaActiva === 'Todas'
+    ? productos
+    : productos.filter(
+        p => p.categoria?.toLowerCase() === categoriaActiva.toLowerCase()
+      );
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Catálogo de Productos</h1>
-        <p className="text-gray-500 text-sm mt-1">Visualización de presentaciones y productos disponibles en la fábrica.</p>
+        <p className="text-gray-500 text-sm mt-1">
+          Visualización de presentaciones y disponibilidad real según stock en cámara de frío.
+        </p>
       </div>
 
       {/* Filtros de Categoría */}
@@ -69,38 +96,62 @@ function ProductosPage() {
       ) : productosFiltrados.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <span className="text-4xl block mb-2">🍦</span>
-          <p>No hay productos disponibles en esta categoría.</p>
+          <p>No hay productos cargados en esta categoría.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {productosFiltrados.map(prod => (
-            <div key={prod.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition group flex flex-col justify-between">
-              
-              {/* Imagen y Badge */}
+            <div
+              key={prod.id}
+              className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition group flex flex-col justify-between ${
+                !prod.disponible ? 'opacity-75' : ''
+              }`}
+            >
+              {/* Imagen y Badge Dinámico */}
               <div className="h-48 bg-gray-100 relative overflow-hidden">
-                <img 
-                  src={prod.imagenUrl || 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=500&auto=format&fit=crop&q=60'} 
+                <img
+                  src={prod.imagenUrl || 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=500&auto=format&fit=crop&q=60'}
                   alt={prod.nombre}
-                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                  className={`w-full h-full object-cover group-hover:scale-105 transition duration-300 ${
+                    !prod.disponible ? 'grayscale-[40%]' : ''
+                  }`}
                 />
                 <div className="absolute top-3 right-3">
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full shadow-sm bg-green-100 text-green-700 flex items-center gap-1">
-                    ✓ Disponible
+                  {prod.disponible ? (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full shadow-sm bg-green-100 text-green-700 flex items-center gap-1">
+                      ✓ Disponible
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full shadow-sm bg-red-100 text-red-700 flex items-center gap-1">
+                      ✕ Sin Stock
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Información del Producto */}
+              <div className="p-5 flex flex-col flex-grow justify-between">
+                <div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">
+                    {prod.categoria}
+                  </p>
+                  <h3 className="font-bold text-gray-800 text-lg leading-tight mb-2">
+                    {prod.nombre}
+                  </h3>
+                  {prod.descripcion && (
+                    <p className="text-xs text-gray-500 line-clamp-2">{prod.descripcion}</p>
+                  )}
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                  <span className="text-xl font-bold text-pink-600">
+                    ${Number(prod.precio).toFixed(2)}
+                  </span>
+                  <span className="text-xs font-medium text-gray-400">
+                    {prod.disponible ? `${prod.stock} uds. en cámara` : 'Agotado'}
                   </span>
                 </div>
               </div>
-
-              {/* Información del Producto (Ajustada) */}
-              <div className="p-5 flex flex-col flex-grow justify-between">
-                <div>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1">{prod.categoria}</p>
-                  <h3 className="font-bold text-gray-800 text-lg leading-tight mb-2">{prod.nombre}</h3>
-                </div>
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <span className="text-xl font-bold text-pink-600">${Number(prod.precio).toFixed(2)}</span>
-                </div>
-              </div>
-
             </div>
           ))}
         </div>

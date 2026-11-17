@@ -26,7 +26,10 @@ function Navbar() {
     { path: "/", label: "Catálogo Público" },
   ];
 
-  const enlacesPublicos = [{ path: "/", label: "Catálogo" }];
+  const enlacesPublicos = [
+    { path: "/", label: "Catálogo" },
+    { path: "/nosotros", label: "Nosotros" },
+  ];
 
   // 3. Asignamos la lista correcta según el rol actual
   const enlacesAMostrar =
