@@ -1,8 +1,7 @@
 import axios from 'axios';
 
-// Creamos una instancia preconfigurada de Axios
 const frizkyApi = axios.create({
-    baseURL: 'http://localhost:5015/api',
+  baseURL: 'https://l8zgq091-5015.use.devtunnels.ms/api',
 });
 
 export default frizkyApi;
